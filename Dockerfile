@@ -1,5 +1,4 @@
 FROM kazukgw/docker-ffmpeg
-WORKDIR /home/nginx/
 
 RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 136221EE520DDFAF0A905689B9316A7BC7917B12 \
  && echo 'deb http://ppa.launchpad.net/chris-lea/redis-server/ubuntu trusty main' > /etc/apt/sources.list.d/redis.list \
@@ -10,13 +9,15 @@ RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 136221EE52
                           libpcre3-dev libssl-dev \
  && apt-get -q -y clean && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
+
 RUN groupadd nginx
 RUN useradd -m -g nginx nginx
 
+
 RUN cd /root && git clone https://github.com/arut/nginx-rtmp-module.git
 
-ENV OPENRESTY_VERSION 1.7.2.1
 
+ENV OPENRESTY_VERSION 1.7.2.1
 RUN wget -nv http://openresty.org/download/ngx_openresty-$OPENRESTY_VERSION.tar.gz \
          -O /root/ngx_openresty-$OPENRESTY_VERSION.tar.gz \
  && tar -xzf /root/ngx_openresty-$OPENRESTY_VERSION.tar.gz -C /root/ \
@@ -39,13 +40,21 @@ RUN wget -nv http://openresty.org/download/ngx_openresty-$OPENRESTY_VERSION.tar.
     && make \
     && make install 
 
-RUN mkdir -p /etc/nginx /var/log/nginx /home/nginx/html
+
+RUN mkdir -p /var/log/nginx \
+             /usr/local/openresty/nginx/conf/server_conf \
+             /usr/local/openresty/nginx/conf/rtmp_conf \
+             /usr/local/openresty/nginx/conf/lua
+
 
 ADD nginx.conf.template /usr/local/openresty/nginx/conf/nginx.conf.template
 ADD appinit /usr/bin/appinit
 RUN chmod 744 /usr/bin/appinit
 
+
 EXPOSE 80
 EXPOSE 1935
+EXPOSE 6379
+
 
 CMD ["appinit"] 

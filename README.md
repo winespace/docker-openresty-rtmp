@@ -1,9 +1,29 @@
-## ffmpeg + nginx-rtmp module
+ffmpeg + openresty(redis, lua, etc)
+===========
 
-`docker_run` は docker run の長いオプションをファイルにまとめただけのもの。
-`docker run` して起動するのではなく `docker_run` ファイルを適宜変更した上で実行して起動する。
+## openresty
+
+openresty
+
+/usr/local/openresty にインストールされる
+
+`/usr/local/openresty/nginx/` 以下にnginxに関わるのファイルが入っている。
 
 
+## nginx.conf.template
 
+
+### なぜ template
+
+起動スクリプト`appinit` が実行されると
+
+`nginx.conf.template` の `{{ XXX }}` とされた部分が
+
+環境変数`XXX` の値と置き換わり nginx.conf として保存されるようになっている。 
+
+### include
+
+- http ディレクティブ外で `include /usr/local/openresty/nginx/conf/rtmp_conf/*.conf`
+- http ディレクティブ内で `include /usr/local/openresty/nginx/conf/server_conf/*.conf`
 
 
