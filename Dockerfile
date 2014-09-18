@@ -1,9 +1,8 @@
 FROM kazukgw/docker-ffmpeg
 
 RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 136221EE520DDFAF0A905689B9316A7BC7917B12 \
- && echo 'deb http://ppa.launchpad.net/chris-lea/redis-server/ubuntu trusty main' > /etc/apt/sources.list.d/redis.list \
  && apt-get -q -y update \
- && apt-get -q -y install redis-server cron luarocks supervisor logrotate \
+ && apt-get -q -y install cron luarocks supervisor logrotate \
                           make build-essential libpcre3-dev libssl-dev wget \
                           iputils-arping libexpat1-dev \
                           libpcre3-dev libssl-dev \
