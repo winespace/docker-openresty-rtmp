@@ -5,7 +5,7 @@ RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 136221EE52
  && apt-get -q -y install cron luarocks supervisor logrotate \
                           make build-essential libpcre3-dev libssl-dev wget \
                           iputils-arping libexpat1-dev \
-                          libpcre3-dev libssl-dev \
+                          libpcre3-dev libssl-dev curl\
  && apt-get -q -y clean && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
 
