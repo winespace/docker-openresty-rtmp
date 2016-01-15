@@ -16,7 +16,7 @@ RUN useradd -m -g nginx nginx
 RUN cd /root && git clone https://github.com/arut/nginx-rtmp-module.git
 
 
-ENV OPENRESTY_VERSION 1.7.2.1
+ENV OPENRESTY_VERSION 1.9.7.1
 RUN wget -nv http://openresty.org/download/ngx_openresty-$OPENRESTY_VERSION.tar.gz \
          -O /root/ngx_openresty-$OPENRESTY_VERSION.tar.gz \
  && tar -xzf /root/ngx_openresty-$OPENRESTY_VERSION.tar.gz -C /root/ \
@@ -35,9 +35,9 @@ RUN wget -nv http://openresty.org/download/ngx_openresty-$OPENRESTY_VERSION.tar.
     --without-http_fastcgi_module \
     --without-http_uwsgi_module \
     --without-http_scgi_module \
-    --add-module=/root/nginx-rtmp-module --user=nginx \ 
+    --add-module=/root/nginx-rtmp-module --user=nginx \
     && make \
-    && make install 
+    && make install
 
 
 RUN mkdir -p /var/log/nginx \
@@ -56,4 +56,4 @@ EXPOSE 1935
 EXPOSE 6379
 
 
-CMD ["appinit"] 
+CMD ["appinit"]
