@@ -13,7 +13,7 @@ RUN groupadd nginx
 RUN useradd -m -g nginx nginx
 
 
-RUN cd /root && git clone https://github.com/arut/nginx-rtmp-module.git
+ADD nginx-rtmp-module /root/nginx-rtmp-module
 
 
 ENV OPENRESTY_VERSION 1.9.7.1
