@@ -11,7 +11,6 @@ daemon off;
 worker_rlimit_nofile 10240;
 events {
   worker_connections  2048;
-	multi_accept on;
 }
 
 {{ NGINX_INITIALIZE_CONF }}
@@ -26,10 +25,8 @@ http {
             '$status $body_bytes_sent "$http_referer" '
             '"$http_user_agent" "$http_x_forwarded_for"';
 
-  #access_log  /var/log/nginx/access.log  main;
-	access_log off;
-	open_file_cache max=100 inactive=20s;
-	tcp_nopush on;
+  access_log  /var/log/nginx/access.log  main;
+	#access_log off;
 	server_tokens off;
 
   sendfile    on;
