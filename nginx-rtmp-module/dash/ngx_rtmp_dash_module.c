@@ -12,6 +12,7 @@ static ngx_rtmp_publish_pt              next_publish;
 static ngx_rtmp_close_stream_pt         next_close_stream;
 static ngx_rtmp_stream_begin_pt         next_stream_begin;
 static ngx_rtmp_stream_eof_pt           next_stream_eof;
+static ngx_rtmp_playlist_pt             next_playlist;
 
 
 static ngx_int_t ngx_rtmp_dash_postconfiguration(ngx_conf_t *cf);
@@ -221,15 +222,20 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
     ngx_fd_t                   fd;
     struct tm                  tm;
     ngx_str_t                  noname, *name;
-    ngx_uint_t                 i;
+    ngx_uint_t                 i, frame_rate_num, frame_rate_denom;
+    ngx_uint_t                 depth_msec;
     ngx_rtmp_dash_ctx_t       *ctx;
     ngx_rtmp_codec_ctx_t      *codec_ctx;
     ngx_rtmp_dash_frag_t      *f;
     ngx_rtmp_dash_app_conf_t  *dacf;
 
+    ngx_rtmp_playlist_t        v;
+
     static u_char              buffer[NGX_RTMP_DASH_BUFSIZE];
     static u_char              start_time[sizeof("1970-09-28T12:00:00+06:00")];
     static u_char              end_time[sizeof("1970-09-28T12:00:00+06:00")];
+    static u_char              buffer_depth[sizeof("P00Y00M00DT00H00M00.00S")];
+    static u_char              frame_rate[(NGX_INT_T_LEN * 2) + 2];
 
     dacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_dash_module);
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_dash_module);
@@ -262,7 +268,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
     "    availabilityEndTime=\"%s\"\n"                                         \
     "    minimumUpdatePeriod=\"PT%uiS\"\n"                                     \
     "    minBufferTime=\"PT%uiS\"\n"                                           \
-    "    timeShiftBufferDepth=\"PT0H0M0.00S\"\n"                               \
+    "    timeShiftBufferDepth=\"%s\"\n"                                        \
     "    suggestedPresentationDelay=\"PT%uiS\"\n"                              \
     "    profiles=\"urn:hbbtv:dash:profile:isoff-live:2012,"                   \
                    "urn:mpeg:dash:profile:isoff-live:2011\"\n"                 \
@@ -277,14 +283,14 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
     "        segmentAlignment=\"true\"\n"                                      \
     "        maxWidth=\"%ui\"\n"                                               \
     "        maxHeight=\"%ui\"\n"                                              \
-    "        maxFrameRate=\"%ui\">\n"                                          \
+    "        maxFrameRate=\"%s\">\n"                                           \
     "      <Representation\n"                                                  \
     "          id=\"%V_H264\"\n"                                               \
     "          mimeType=\"video/mp4\"\n"                                       \
     "          codecs=\"avc1.%02uxi%02uxi%02uxi\"\n"                           \
     "          width=\"%ui\"\n"                                                \
     "          height=\"%ui\"\n"                                               \
-    "          frameRate=\"%ui\"\n"                                            \
+    "          frameRate=\"%s\"\n"                                             \
     "          sar=\"1:1\"\n"                                                  \
     "          startWithSAP=\"1\"\n"                                           \
     "          bandwidth=\"%ui\">\n"                                           \
@@ -341,8 +347,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
     "  </Period>\n"                                                            \
     "</MPD>\n"
 
-    ngx_libc_localtime(ctx->start_time.sec +
-                       ngx_rtmp_dash_get_frag(s, 0)->timestamp / 1000, &tm);
+    ngx_libc_localtime(ctx->start_time.sec, &tm);
 
     *ngx_sprintf(start_time, "%4d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d",
                  tm.tm_year + 1900, tm.tm_mon + 1,
@@ -365,6 +370,20 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
                  ngx_abs(ctx->start_time.gmtoff / 60),
                  ngx_abs(ctx->start_time.gmtoff % 60)) = 0;
 
+    
+    depth_msec = (ngx_uint_t) (
+                 ngx_rtmp_dash_get_frag(s, ctx->nfrags - 1)->timestamp +
+                 ngx_rtmp_dash_get_frag(s, ctx->nfrags - 1)->duration - 
+                 ngx_rtmp_dash_get_frag(s, 0)->timestamp);
+
+    ngx_libc_gmtime((ngx_uint_t) (depth_msec / 1000), &tm);
+
+    *ngx_sprintf(buffer_depth, "P%dY%02dM%02dDT%dH%02dM%02d.%02dS",
+                 tm.tm_year - 70, tm.tm_mon,
+                 tm.tm_mday - 1, tm.tm_hour,
+                 tm.tm_min, tm.tm_sec,
+                 (ngx_uint_t) ((depth_msec % 1000) / 10)) = 0;
+
     last = buffer + sizeof(buffer);
 
     p = ngx_slprintf(buffer, last, NGX_RTMP_DASH_MANIFEST_HEADER,
@@ -372,6 +391,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
                      end_time,
                      (ngx_uint_t) (dacf->fraglen / 1000),
                      (ngx_uint_t) (dacf->fraglen / 1000),
+                     buffer_depth,
                      (ngx_uint_t) (dacf->fraglen / 500));
 
     n = ngx_write_fd(fd, buffer, p - buffer);
@@ -382,17 +402,41 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
     sep = (dacf->nested ? "" : "-");
 
     if (ctx->has_video) {
+        frame_rate_num = (ngx_uint_t) (codec_ctx->frame_rate * 1000.);
+
+        if (frame_rate_num % 1000 == 0) {
+            *ngx_sprintf(frame_rate, "%ui", frame_rate_num / 1000) = 0;
+        } else {
+            frame_rate_denom = 1000;
+            switch (frame_rate_num) {
+                case 23976:
+                    frame_rate_num = 24000;
+                    frame_rate_denom = 1001;
+                    break;
+                case 29970:
+                    frame_rate_num = 30000;
+                    frame_rate_denom = 1001;
+                    break;
+                case 59940:
+                    frame_rate_num = 60000;
+                    frame_rate_denom = 1001;
+                    break;
+            }
+
+            *ngx_sprintf(frame_rate, "%ui/%ui", frame_rate_num, frame_rate_denom) = 0;
+        }
+
         p = ngx_slprintf(buffer, last, NGX_RTMP_DASH_MANIFEST_VIDEO,
                          codec_ctx->width,
                          codec_ctx->height,
-                         codec_ctx->frame_rate,
+                         frame_rate,
                          &ctx->name,
                          codec_ctx->avc_profile,
                          codec_ctx->avc_compat,
                          codec_ctx->avc_level,
                          codec_ctx->width,
                          codec_ctx->height,
-                         codec_ctx->frame_rate,
+                         frame_rate,
                          (ngx_uint_t) (codec_ctx->video_data_rate * 1000),
                          name, sep,
                          name, sep);
@@ -450,7 +494,11 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
         return NGX_ERROR;
     }
 
-    return NGX_OK;
+    ngx_memzero(&v, sizeof(v));
+    ngx_str_set(&(v.module), "dash");
+    v.playlist.data = ctx->playlist.data;
+    v.playlist.len = ctx->playlist.len;
+    return next_playlist(s, &v);
 }
 
 
@@ -1423,6 +1471,11 @@ ngx_rtmp_dash_cleanup(void *data)
     return cleanup->playlen / 500;
 }
 
+static ngx_int_t
+ngx_rtmp_dash_playlist(ngx_rtmp_session_t *s, ngx_rtmp_playlist_t *v)
+{
+    return next_playlist(s, v);
+}
 
 static void *
 ngx_rtmp_dash_create_app_conf(ngx_conf_t *cf)
@@ -1523,6 +1576,9 @@ ngx_rtmp_dash_postconfiguration(ngx_conf_t *cf)
 
     next_stream_eof = ngx_rtmp_stream_eof;
     ngx_rtmp_stream_eof = ngx_rtmp_dash_stream_eof;
+
+    next_playlist = ngx_rtmp_playlist;
+    ngx_rtmp_playlist = ngx_rtmp_dash_playlist;
 
     return NGX_OK;
 }
